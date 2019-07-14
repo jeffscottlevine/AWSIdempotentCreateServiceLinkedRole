@@ -1,0 +1,243 @@
+# MIT License - No Attribution
+# 
+# Copyright (c) 2019 Jeffrey S. Levine
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# IdempotentCreateServiceLinkedRole.yaml - Create a service-linked
+# role if it doesn't already exist.
+#
+# See the Lamba function code for more details.
+---
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Create service-linked role if it doesn't already exist
+
+Resources:
+
+# LambdaExecutionRole - The AWS Lambda execution role for custom
+# CloudFormation resources.   This function will be used for the
+# Lambda functions that are backing custom CloudFormation resources.
+# As such, it must include permissions for all the API calls that
+# the Lambda function will make.  This typically includes the APIs
+# needed to write to Amazon CloudWatch Logs.  In this case, since
+# we are using a custom resource to look up AMIs, it needs to also
+# support the DescribeImages API.
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: '/'
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+            - iam:CreateServiceLinkedRole
+            - iam:GetRole
+            Resource: '*'
+
+# IdempotentCreateServiceLinkedRoleFunction
+#
+# This Lambda function backs a custome CloudFormation resources and creates an
+# AWS service-linked role if it doesn't already exist.
+#
+# The function accepts the following parameters that are passed as properties:
+#
+# (1) The AWS service name (e.g. 'inspector.amazonaws.com')
+#
+# The function then does the following:
+#
+# (1) Looks up the corresponding default IAM role name associated with the
+#     ervice.  If it finds the role, it sets the resource response Arn and
+#     RoleId values.
+#
+# (2) If the service-linked role does not exist, create it.  If the creation is
+#     successful, return the Arn and RoleId in the resource response.
+#
+# (3) If the creation of the service-linked role fails report an error.
+#
+# Caveats:
+# 
+# (1) This function does not pass the ACID test. If multiple copies of this
+#     function are running with the same AWS service name in the same region
+#     at the same time, there could be some conflicts.
+#
+# (2) The function does not support the 'suffix' extension that allows
+#     multiple service-linked roles to exist for the same service.
+#     That is actually why this code was written.
+#
+# (3) The function ignores deletes and updates.
+
+  IdempotentCreateServiceLinkedRoleFunction:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: 'python3.6'
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+          import string
+          from botocore.exceptions import ClientError
+
+          def handler(event, context):
+            serviceDictionary = {
+              'inspector.amazonaws.com': 'AWSServiceRoleForAmazonInspector'
+            }
+
+            print('event =', json.dumps(event))
+
+            if event['RequestType'] in ['Delete', 'Update']:
+              responseData = {}      
+              cfnresponse.send(
+                event,
+                context,
+                cfnresponse.SUCCESS,
+                responseData
+              )
+              return
+            
+            client = boto3.client('iam')
+            awsServiceName = event['ResourceProperties']['AWSServiceName']
+
+            if not awsServiceName in serviceDictionary:
+              responseData = {}
+              cfnresponse.send(
+                event,
+                context,
+                cfnresponse.FAILED,
+                responseData
+              )
+              return
+
+            try:
+              response = client.get_role(
+                RoleName = serviceDictionary[awsServiceName]
+              )
+            except:
+              roleAlreadyExists = False
+            else:
+              roleAlreadyExists = True
+
+            if roleAlreadyExists:
+              print(
+                'The service-linked role for service',
+                awsServiceName,
+                'already exists.  The Arn and RoleId will be returned.'
+              )
+              responseData = {
+                'Arn': response['Role']['Arn'],
+                'RoleId': response['Role']['RoleId']
+              }      
+              cfnresponse.send(
+                event,
+                context,
+                cfnresponse.SUCCESS,
+                responseData
+              )
+              return
+
+            try:
+              response = client.create_service_linked_role(
+                AWSServiceName=awsServiceName
+              )
+            except ClientError as e:
+              createRoleSucceeded=False
+            else:
+              createRoleSucceeded=True
+
+            if createRoleSucceeded:
+              print(
+                'The service-linked role for service',
+                awsServiceName,
+                'has been created.  The Arn and RoleId will be returned.'
+              )
+
+              responseData = {
+                'Arn': response['Role']['Arn'],
+                'RoleId': response['Role']['RoleId']
+              }      
+              cfnresponse.send(
+                event,
+                context,
+                cfnresponse.SUCCESS,
+                responseData
+              )
+            else:
+              print(
+                'Unable to create the service-linked role for service',
+                awsServiceName,
+                '.'
+              )
+              print ('response =', json.dumps(e.response))
+              responseData = {}
+              cfnresponse.send(
+                event,
+                context,
+                cfnresponse.FAILED,
+                responseData
+              )
+
+  IdempotentCreateServiceLinkedRole1:
+    Type: Custom::IdempotentCreateServiceLinkedRole1
+    DeletionPolicy: Retain
+    Properties:
+      ServiceToken: !GetAtt IdempotentCreateServiceLinkedRoleFunction.Arn
+      AWSServiceName: 'inspector.amazonaws.com'
+
+  IdempotentCreateServiceLinkedRole2:
+    Type: Custom::IdempotentCreateServiceLinkedRole2
+    DeletionPolicy: Retain
+    DependsOn: IdempotentCreateServiceLinkedRole1
+    Properties:
+      ServiceToken: !GetAtt IdempotentCreateServiceLinkedRoleFunction.Arn
+      AWSServiceName: 'inspector.amazonaws.com'
+
+Outputs:
+  Role1Arn:
+    Description: Role 1 ARN
+    Value: !GetAtt IdempotentCreateServiceLinkedRole1.Arn
+  Role1RoleId:
+    Description: Role 1 RoleId
+    Value: !GetAtt IdempotentCreateServiceLinkedRole1.RoleId
+  Role2Arn:
+    Description: Role 2 ARN
+    Value: !GetAtt IdempotentCreateServiceLinkedRole2.Arn
+  Role2RoleId:
+    Description: Role 2 RoleId
+    Value: !GetAtt IdempotentCreateServiceLinkedRole2.RoleId
