@@ -28,16 +28,17 @@ Description: Create service-linked role if it doesn't already exist
 
 Resources:
 
-# LambdaExecutionRole - The AWS Lambda execution role for custom
-# CloudFormation resources.   This function will be used for the
-# Lambda functions that are backing custom CloudFormation resources.
-# As such, it must include permissions for all the API calls that
-# the Lambda function will make.  This typically includes the APIs
-# needed to write to Amazon CloudWatch Logs.  In this case, since
-# we are using a custom resource to look up AMIs, it needs to also
-# support the DescribeImages API.
+# ICSLRLambdaExecutionRole - The AWS Lambda execution role for the custom
+# CloudFormation resources that are used to create the service-linked role.  
+# It must include permissions for all the API calls made by the Lambda
+# function.  This typically includes the APIsneeded to write to Amazon
+# CloudWatch Logs.  In this case, since we are using a custom resource to
+# work with service-linked role, it must include the IAM permissions to
+# call the GetRole and CreateServiceLinkedRole APIs.
+#
+# Note: "ICSLR" is short for "IdempotentCreateServiceLinkedRole."
 
-  LambdaExecutionRole:
+  ICSLRLambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -104,7 +105,7 @@ Resources:
     Properties: 
       Handler: index.handler
       MemorySize: 128
-      Role: !GetAtt LambdaExecutionRole.Arn
+      Role: !GetAtt ICSLRLambdaExecutionRole.Arn
       Runtime: 'python3.6'
       Timeout: 30
       Code:
