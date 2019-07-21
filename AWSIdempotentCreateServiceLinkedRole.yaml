@@ -17,7 +17,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# IdempotentCreateServiceLinkedRole.yaml - Create a service-linked
+# AWSIdempotentCreateServiceLinkedRole.yaml - Create a service-linked
 # role if it doesn't already exist.
 #
 # See the Lamba function code for more details.
@@ -28,17 +28,17 @@ Description: Create service-linked role if it doesn't already exist
 
 Resources:
 
-# ICSLRLambdaExecutionRole - The AWS Lambda execution role for the custom
-# CloudFormation resources that are used to create the service-linked role.  
+# IdempotentCreateServiceLinkedRoleExecutionRole - The AWS Lambda execution
+# role for the custom CloudFormation resources that are used to create the
+# service-linked role.
+#
 # It must include permissions for all the API calls made by the Lambda
 # function.  This typically includes the APIsneeded to write to Amazon
 # CloudWatch Logs.  In this case, since we are using a custom resource to
 # work with service-linked role, it must include the IAM permissions to
 # call the GetRole and CreateServiceLinkedRole APIs.
-#
-# Note: "ICSLR" is short for "IdempotentCreateServiceLinkedRole."
 
-  ICSLRLambdaExecutionRole:
+  IdempotentCreateServiceLinkedRoleExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -105,7 +105,7 @@ Resources:
     Properties: 
       Handler: index.handler
       MemorySize: 128
-      Role: !GetAtt ICSLRLambdaExecutionRole.Arn
+      Role: !GetAtt IdempotentCreateServiceLinkedRoleExecutionRole.Arn
       Runtime: 'python3.6'
       Timeout: 30
       Code:
