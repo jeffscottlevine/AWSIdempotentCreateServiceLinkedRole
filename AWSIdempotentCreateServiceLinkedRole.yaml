@@ -177,10 +177,13 @@ Resources:
               response = client.create_service_linked_role(
                 AWSServiceName=awsServiceName
               )
+              createRoleSucceeded=True
             except ClientError as e:
               createRoleSucceeded=False
+              boto3ClientError=True
             else:
-              createRoleSucceeded=True
+              createRoleSucceeded=False
+              boto3ClientError=False
 
             if createRoleSucceeded:
               print(
@@ -205,7 +208,10 @@ Resources:
                 awsServiceName,
                 '.'
               )
-              print ('response =', json.dumps(e.response))
+              if boto3ClientError:
+                print ('response =', json.dumps(e.response))
+              else:
+                print('unknown exception'0
               responseData = {}
               cfnresponse.send(
                 event,
