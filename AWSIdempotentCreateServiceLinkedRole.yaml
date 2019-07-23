@@ -180,10 +180,6 @@ Resources:
               createRoleSucceeded=True
             except ClientError as e:
               createRoleSucceeded=False
-              boto3ClientError=True
-            else:
-              createRoleSucceeded=False
-              boto3ClientError=False
 
             if createRoleSucceeded:
               print(
@@ -208,10 +204,7 @@ Resources:
                 awsServiceName,
                 '.'
               )
-              if boto3ClientError:
-                print ('response =', json.dumps(e.response))
-              else:
-                print('unknown exception'0
+              print('exception =', json.dumps(e.response))
               responseData = {}
               cfnresponse.send(
                 event,
