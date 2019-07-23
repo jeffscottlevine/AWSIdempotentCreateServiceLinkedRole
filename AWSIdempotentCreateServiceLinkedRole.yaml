@@ -150,10 +150,9 @@ Resources:
               response = client.get_role(
                 RoleName = serviceDictionary[awsServiceName]
               )
+              roleAlreadyExists = True
             except:
               roleAlreadyExists = False
-            else:
-              roleAlreadyExists = True
 
             if roleAlreadyExists:
               print(
