@@ -1,8 +1,8 @@
-# AWSIdempotentCreateServiceLinkedRole
+# AWS Idempotent Create Service Linked Role
 
 ## Overview
 
-This file is an AWS CloudFormation template that is used to provide a CloudFormation custom resource that creates
+This repository contains an AWS CloudFormation template that is used to provide a CloudFormation custom resource that creates
 a service-linked role idempotently.  This means:
 
 (1) If the role doesn't exist, create the role.  If the role is successfully created, return SUCCESS otherwise return FAILED.
